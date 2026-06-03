@@ -92,28 +92,30 @@ v2 runs **alongside v1** without changing the existing `mt5` service. Account ID
 | v2 worker 1 | (internal) | `http://localhost:3011` |
 | v2 worker 2 | (internal) | `http://localhost:3012` |
 
+**Shortcuts:** [`Makefile`](Makefile) wraps the compose file sets — run `make` or `make help` for targets. Use the same target family for `up` and `down` (e.g. `make up` + `make down`, not bare `docker compose down`).
+
 **Start v1 only (unchanged):**
 
 ```bash
-docker compose up -d
+make up-v1
 ```
 
 **Start v1 + v2 together (Linux VPS / production):**
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.v2.yml up -d --build
+make up
 ```
 
 **Apple Silicon Mac (add amd64 emulation overlay):**
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.v2.yml -f docker-compose.mac.yml up -d --build
+make up-mac
 ```
 
 **v2 only (after retiring v1):**
 
 ```bash
-docker compose -f docker-compose.v2.yml up -d
+make up-v2
 ```
 
 **Bootstrap v2 workers:**
@@ -344,42 +346,15 @@ The Flask API runs on port 5001 by default. Key endpoints:
 
 ### Managing Services
 
-**Start Services:**
+Use [`Makefile`](Makefile) targets so `down` matches the stack you started (`make help` lists all).
 
-```bash
-docker-compose up -d
-```
+**v1 stack:** `make up-v1` · `make down-v1` · `make logs-v1` · `make restart-v1` · `make build-v1`
 
-**Stop Services:**
+**v1 + v2:** `make up` · `make down` · `make logs` · `make build` · `make logs-gateway` · `make logs-worker1`
 
-```bash
-docker-compose down
-```
+**Mac v1 + v2:** `make up-mac` · `make down-mac` · `make logs-mac` · `make build-mac`
 
-**View Logs:**
-
-```bash
-# All services
-docker-compose logs -f
-
-# MT5 service only
-docker-compose logs -f mt5
-
-# Traefik service only
-docker-compose logs -f traefik
-```
-
-**Restart Service:**
-
-```bash
-docker-compose restart mt5
-```
-
-**Rebuild After Changes:**
-
-```bash
-docker-compose up -d --build
-```
+**Traefik:** `make up-traefik` / `make up-traefik-full` (and matching `down-*`, `logs-traefik*`)
 
 ## API Documentation
 
@@ -496,9 +471,7 @@ docker exec -it mt5 cat /var/log/mt5_setup.log
 3. Reset **worker volumes only** on Mac (never prod `./config/.wine` if v1 works):
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.v2.yml -f docker-compose.mac.yml down
-rm -rf config/workers/worker-1/.wine config/workers/worker-2/.wine
-docker compose -f docker-compose.yml -f docker-compose.v2.yml -f docker-compose.mac.yml up -d --build
+make worker-reset-mac
 ```
 
 4. Watch install: `docker exec mt5-worker-1 tail -f /var/log/mt5_setup.log` — prefix path must show `/config/.wine`, not blank.
