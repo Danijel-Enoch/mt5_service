@@ -7,6 +7,7 @@ A Docker-based REST API service that provides programmatic access to MetaTrader 
 - [MT5 Service - MetaTrader 5 Trading Service](#mt5-service---metatrader-5-trading-service)
   - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
+  - [Platform support](#platform-support)
   - [Features](#features)
   - [Architecture](#architecture)
   - [Prerequisites](#prerequisites)
@@ -34,9 +35,17 @@ A Docker-based REST API service that provides programmatic access to MetaTrader 
 
 ## Overview
 
-`mt5_service` provides a Docker-based REST API for MetaTrader 5 trading operations. It runs MetaTrader 5 using Wine on a Debian-based Docker environment, exposing all MT5 functionality through a Flask REST API. The service can be deployed to a VPS (recommended) or run locally for development.
+`mt5_service` provides a Docker-based REST API for MetaTrader 5 trading operations. It runs MetaTrader 5 using Wine on a Debian-based Docker environment, exposing all MT5 functionality through a Flask REST API. Deploy on a **Linux VPS** (recommended) or a Linux host with Docker; see [Platform support](#platform-support) before using macOS.
 
 This service enables programmatic access to MT5 for executing trades, retrieving market data, managing positions, and accessing trading history through standard HTTP endpoints.
+
+## Platform support
+
+| Platform | Support |
+| --- | --- |
+| **Linux** | **Supported** — use a Linux VPS or Linux host with Docker. This is the intended production and development environment. |
+| **Windows** | **May work** — Docker Desktop with Linux containers (typically WSL2) is the expected setup; not the primary tested path. |
+| **macOS** | **Not supported for MT5** — containers can build and the stack may start, but **Wine cannot be installed or run reliably inside containers on Docker Desktop for Mac** (Rosetta/amd64 emulation and prefix limitations). Containerization does not remove that constraint. Use a **Linux VPS** for production and for logging into MT5 via VNC. |
 
 **Key Components:**
 
@@ -106,7 +115,7 @@ make up-v1
 make up
 ```
 
-**Apple Silicon Mac (add amd64 emulation overlay):**
+**macOS only (experimental; Wine/MT5 bootstrap usually fails — see [Platform support](#platform-support)):**
 
 ```bash
 make up-mac
@@ -144,9 +153,8 @@ With Traefik, merge [`docker-compose.v2.traefik.yml`](docker-compose.v2.traefik.
 
 - **Docker:** Docker 20.10+ installed. [Install Docker](https://docs.docker.com/get-docker/)
 - **Docker Compose:** Docker Compose v2+ for orchestrating services. [Install Docker Compose](https://docs.docker.com/compose/install/)
-- **VPS or Local Machine:**
-  - **VPS (Recommended):** Linux VPS with 2GB+ RAM (4GB+ for production)
-  - **Local Development:** Linux/macOS with Docker Desktop
+- **Host OS:** Linux (VPS or local). Windows may work with Docker Desktop + Linux containers. macOS is not suitable for running Wine/MT5 in these containers — see [Platform support](#platform-support).
+- **VPS (recommended):** Linux VPS with 2GB+ RAM (4GB+ for production)
 - **Domain Name (Optional):** Required only if using Traefik with HTTPS
 - **MT5 Account:** Demo or live trading account credentials
 
@@ -154,33 +162,22 @@ With Traefik, merge [`docker-compose.v2.traefik.yml`](docker-compose.v2.traefik.
 
 ## Quick Start
 
-For local development:
+On a **Linux** host with Docker and Compose v2:
 
 ```bash
-# Navigate to project directory
 cd mt5_service
-
-# Create .env file
-cat > .env << EOF
-MT5_API_PORT=5001
-EOF
-
-# Build and start
-docker-compose up -d --build
-
-# Check health
-curl http://localhost:5001/health
+cp .env.example .env   # edit if needed
+make up-v1             # v1 only; use `make up` for v1 + v2
+curl http://localhost:5002/health
 ```
 
-For simplified local setup without Traefik, see [Local Development Setup](docs/LOCAL_SETUP.md).
-
-For VPS deployment, see [VPS Deployment Guide](docs/VPS_DEPLOYMENT.md).
+Traefik and optional nginx are not required for a minimal stack. See [Installation](#installation) and [Managing Services](#managing-services).
 
 ## Installation
 
 ### Local Development
 
-For a simplified local setup without Traefik, see [Local Development Setup](docs/LOCAL_SETUP.md).
+Use a Linux machine (or Linux VPS). On macOS, expect Wine/MT5 inside the container not to work — see [Platform support](#platform-support).
 
 1. **Navigate to project directory**
 
@@ -230,7 +227,7 @@ For a simplified local setup without Traefik, see [Local Development Setup](docs
 4. **Build and Start Services**
 
    ```bash
-   docker-compose up -d --build
+   make up-v1    # or: make up  (v1 + v2)
    ```
 5. **Verify Installation**
 
@@ -239,22 +236,23 @@ For a simplified local setup without Traefik, see [Local Development Setup](docs
    docker ps
 
    # Check logs
-   docker-compose logs -f mt5
+   make logs-v1
 
-   # Test API
-   curl http://localhost:5001/health
+   # Test API (host port 5002 → container 5001)
+   curl http://localhost:5002/health
    ```
 
 ### VPS Deployment
 
-For production deployment to a VPS, see the comprehensive [VPS Deployment Guide](docs/VPS_DEPLOYMENT.md) which covers:
+Production deployment is the same stack on a **Linux VPS**:
 
-- VPS provider recommendations
-- Docker installation
-- Firewall configuration
-- Security setup
-- Domain configuration
-- API integration examples
+1. Install Docker and Compose v2 on the VPS.
+2. Copy this repository (and `.env`) to the server; keep `./config` backed up if MT5 is already configured.
+3. Open firewall ports as needed (e.g. `5002` for the v1 API, `5010` for the v2 gateway, `3001`/`3011`/`3012` for VNC if used).
+4. Run `make up` (or `make up-v1` until v2 is needed).
+5. Log into MT5 via VNC once per account/worker; confirm with `curl http://localhost:5002/health` and `curl http://localhost:5010/v2/accounts` when using v2.
+
+Optional HTTPS: merge Traefik compose files (`make up-traefik-full`).
 
 ## Configuration
 
@@ -378,15 +376,13 @@ Run with `docker-compose up -d` for local testing.
 
 ### VPS Deployment (Production)
 
-See comprehensive guide: [VPS Deployment Guide](docs/VPS_DEPLOYMENT.md)
-
 **Quick VPS Setup:**
 
 1. Transfer `mt5_service` folder to VPS
 2. Install Docker and Docker Compose
 3. Configure firewall (open port 5001)
-4. Run `docker-compose up -d`
-5. Access API at `http://your-vps-ip:5001`
+4. Run `make up-v1` or `make up`
+5. Access API at `http://your-vps-ip:5002` (v1) or `http://your-vps-ip:5010` (v2 gateway)
 
 ## API Integration
 
@@ -428,7 +424,7 @@ class MT5Client:
         return response.json()
 ```
 
-See [VPS Deployment Guide - Integration Section](docs/VPS_DEPLOYMENT.md#api-integration) for more examples.
+Point your client at the host-mapped API port (`5002` for v1, `5010` for v2) or your Traefik/nginx `API_DOMAIN`.
 
 ## Logging
 
@@ -476,7 +472,7 @@ make worker-reset-mac
 
 4. Watch install: `docker exec mt5-worker-1 tail -f /var/log/mt5_setup.log` — prefix path must show `/config/.wine`, not blank.
 
-**Mac limitation:** MT5 auto-install can still fail under Docker Desktop Rosetta (`rosetta error: invalid gdt selector`). For reliable worker bootstrap, use a **Linux VPS** or copy a working `./config` tree from production into `config/workers/worker-1/`.
+**macOS limitation:** Wine is not viable inside these containers on Docker Desktop for Mac, regardless of image or compose overlays. MT5 auto-install may fail under Rosetta (`rosetta error: invalid gdt selector`). Do not treat Mac as a supported dev host — use a **Linux VPS** for bootstrap and production, or copy a working `./config` tree from Linux into `config/workers/worker-1/` only for limited experiments.
 
 **API not accessible from outside:**
 
@@ -499,8 +495,6 @@ docker-compose logs traefik | grep -i certificate
 nslookup api.yourdomain.com
 ```
 
-For more detailed troubleshooting, see [VPS Deployment Guide - Troubleshooting](docs/VPS_DEPLOYMENT.md#troubleshooting).
-
 ## License
 
-This project is licensed under the [MIT License](LICENSE.md).
+MIT License.

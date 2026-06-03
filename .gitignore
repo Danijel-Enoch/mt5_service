@@ -54,3 +54,6 @@ docker-compose.override.yml
 *.crt
 *.cert
 .aalocal
+
+# Local / internal documentation
+docs/
