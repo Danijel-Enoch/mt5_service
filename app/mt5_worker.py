@@ -4,21 +4,40 @@ terminal is never used concurrently. Request handlers submit work via run_mt5()
 and block until the worker returns the result.
 """
 import logging
+import os
 import queue
 import threading
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MT5_TERMINAL_PATH = (
+    "/config/.wine/drive_c/Program Files/MetaTrader 5/terminal64.exe"
+)
+
 _job_queue: Optional[queue.Queue] = None
 _worker_started = threading.Event()
 _start_lock = threading.Lock()
 
 
-def _worker_loop() -> None:
+def _initialize_mt5() -> bool:
     import MetaTrader5 as mt5
-    if not mt5.initialize():
-        logger.warning("MT5 worker: initialize() returned False; continuing anyway.")
+
+    path = os.environ.get("MT5_TERMINAL_PATH", DEFAULT_MT5_TERMINAL_PATH)
+    portable = os.environ.get("MT5_PORTABLE", "false").lower() == "true"
+    kwargs = {"path": path, "portable": portable}
+    if not mt5.initialize(**kwargs):
+        logger.warning(
+            "MT5 worker: initialize() returned False (path=%s); continuing anyway.",
+            path,
+        )
+        return False
+    return True
+
+
+def _worker_loop() -> None:
+    if not _initialize_mt5():
+        pass
     _worker_started.set()
     while True:
         job = _job_queue.get()

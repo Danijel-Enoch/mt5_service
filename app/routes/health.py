@@ -1,9 +1,13 @@
-from flask import Blueprint, jsonify
-import MetaTrader5 as mt5
-from flasgger import swag_from
 import logging
-from mt5_worker import run_mt5
+import os
+
+import MetaTrader5 as mt5
+from flask import Blueprint, jsonify
+from flasgger import swag_from
+
 from cache import get as cache_get, set as cache_set
+from mt5_worker import run_mt5
+from routes.internal import get_account_session
 
 health_bp = Blueprint('health', __name__)
 logger = logging.getLogger(__name__)
@@ -44,10 +48,15 @@ def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         initialized = False
+    account_id, server, connected = get_account_session()
     body = {
         "status": "healthy",
         "mt5_connected": mt5 is not None,
-        "mt5_initialized": initialized
+        "mt5_initialized": initialized,
+        "account_id": account_id,
+        "connected": connected,
+        "server": server,
+        "worker_name": os.environ.get("MT5_WORKER_NAME"),
     }
     cache_set(HEALTH_CACHE_KEY, body, HEALTH_TTL)
     return jsonify(body), 200

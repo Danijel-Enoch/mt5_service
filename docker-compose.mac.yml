@@ -1,0 +1,15 @@
+# Optional overlay for Apple Silicon Macs (Docker runs arm64 by default).
+# MT5/Wine require x86_64 — this forces amd64 emulation on Mac only.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.v2.yml -f docker-compose.mac.yml up -d --build
+
+services:
+  mt5:
+    platform: linux/amd64
+
+  mt5-worker-1:
+    platform: linux/amd64
+
+  mt5-worker-2:
+    platform: linux/amd64

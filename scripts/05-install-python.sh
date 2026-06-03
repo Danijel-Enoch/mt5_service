@@ -3,30 +3,52 @@
 source /scripts/02-common.sh
 
 log_message "RUNNING" "05-install-python.sh"
+setup_echo "Running Wine Python setup..."
 
-# Install Python in Wine if not present
-if ! $wine_executable python --version > /dev/null 2>&1; then
-    log_message "INFO" "Installing Python in Wine..."
-    wget -O /tmp/python-installer.exe $python_url > /dev/null 2>&1
-    $wine_executable /tmp/python-installer.exe /quiet InstallAllUsers=1 PrependPath=1 Include_test=0
-    rm /tmp/python-installer.exe
-    log_message "INFO" "Python installed in Wine."
-else
-    log_message "INFO" "Python is already installed in Wine."
-fi
+install_wine_python() {
+    clear_stale_wine_installers
 
-log_message "INFO" "Linux Python version: $(python3 --version 2>&1)"
-log_message "INFO" "Wine Python version: $($wine_executable python --version 2>&1)"
+    if is_wine_python_installed; then
+        resolve_wine_python_exe
+        log_message "INFO" "Python is already installed in Wine at ${wine_python_exe}."
+        setup_echo "Python already installed at ${wine_python_exe}"
+        return 0
+    fi
 
-log_message "INFO" "Checking Wine Python environment..."
-$wine_executable python -c "import sys; print(sys.prefix); print(sys.executable); print(sys.path)"
+    if [ ! -d "${python_template_dir}" ]; then
+        log_message "ERROR" "Python template missing at ${python_template_dir}."
+        setup_echo "ERROR: Python template missing from container image."
+        return 1
+    fi
 
-# Output Python and package information for Wine environment
-log_message "INFO" "Wine Python installation details:"
-$wine_executable python -c "import sys; print(f'Python version: {sys.version}')"
-$wine_executable python -c "import sys; print(f'Python executable: {sys.executable}')"
-$wine_executable python -c "import sys; print(f'Python path: {sys.path}')"
-$wine_executable python -c "import site; print(f'Site packages: {site.getsitepackages()}')"
+    local target_dir="${WINEPREFIX}/drive_c/Python39"
+    log_message "INFO" "Seeding Python ${python_version} from image template..."
+    setup_echo "Copying prebuilt Python ${python_version} into Wine prefix..."
 
-log_message "INFO" "Installed packages in Wine Python environment:"
-$wine_executable python -m pip list
+    mkdir -p "${WINEPREFIX}/drive_c"
+    rm -rf "${target_dir}"
+    cp -a "${python_template_dir}" "${target_dir}"
+    setup_echo "Python files copied; verifying Wine Python..."
+
+    if ! is_wine_python_installed; then
+        log_message "ERROR" "Python verification failed after copying template."
+        setup_echo "ERROR: Python copy completed but verification failed."
+        return 1
+    fi
+
+    resolve_wine_python_exe
+    log_message "INFO" "Python installed in Wine at ${wine_python_exe}."
+    setup_echo "Python ready at ${wine_python_exe}"
+
+    log_message "INFO" "Linux Python version: $(python3 --version 2>&1)"
+    log_message "INFO" "Wine Python version: $(wine_python --version 2>&1)"
+
+    log_message "INFO" "Wine Python installation details:"
+    wine_python -c "import sys; print(f'Python version: {sys.version}')" >> /var/log/mt5_setup.log 2>&1
+    wine_python -c "import sys; print(f'Python executable: {sys.executable}')" >> /var/log/mt5_setup.log 2>&1
+
+    log_message "INFO" "Installed packages in Wine Python environment:"
+    wine_python -m pip list >> /var/log/mt5_setup.log 2>&1
+}
+
+install_wine_python || exit 1

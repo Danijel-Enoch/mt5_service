@@ -6,36 +6,42 @@ log_message "RUNNING" "07-start-wine-flask.sh"
 
 log_message "INFO" "Starting Flask server in Wine environment..."
 
-# MT5_API_PORT should be available from /tmp/mt5_env.sh (sourced in 01-start.sh)
-# If not, try reading from /tmp/mt5_env.sh directly
+if ! is_wine_python_installed; then
+    log_message "ERROR" "Wine Python is not installed; cannot start Flask."
+    exit 1
+fi
+
 if [ -z "$MT5_API_PORT" ] && [ -f /tmp/mt5_env.sh ]; then
     MT5_API_PORT=$(grep '^MT5_API_PORT=' /tmp/mt5_env.sh 2>/dev/null | cut -d'=' -f2)
 fi
 
 if [ -z "$MT5_API_PORT" ]; then
-    log_message "ERROR" "MT5_API_PORT environment variable is not set!"
-    log_message "DEBUG" "Checking /tmp/mt5_env.sh..."
-    [ -f /tmp/mt5_env.sh ] && cat /tmp/mt5_env.sh || log_message "DEBUG" "/tmp/mt5_env.sh not found"
-    exit 1
+    MT5_API_PORT=5001
+    log_message "WARN" "MT5_API_PORT not set; defaulting to ${MT5_API_PORT}"
 fi
 
 log_message "INFO" "MT5_API_PORT is set to: $MT5_API_PORT"
-
-# Export it for Wine/Python
 export MT5_API_PORT
 
-# Run the Flask app using Wine's Python
-wine python /app/app.py &
-
-FLASK_PID=$!
-
-# Give the server some time to start
-sleep 5
-
-# Check if the Flask server is running
-if ps -p $FLASK_PID > /dev/null; then
-    log_message "INFO" "Flask server in Wine started successfully with PID $FLASK_PID."
-else
-    log_message "ERROR" "Failed to start Flask server in Wine."
-    exit 1
+if nc -z 127.0.0.1 "${MT5_API_PORT}" 2>/dev/null; then
+    log_message "INFO" "Flask already listening on port ${MT5_API_PORT}."
+    exit 0
 fi
+
+cd /app || exit 1
+# Unix PYTHONPATH=/app is ignored by Windows python.exe; use the Wine drive path.
+APP_DIR_WIN="$(${wine_executable} winepath -w /app 2>/dev/null | tr -d '\r\n')"
+export PYTHONPATH="${APP_DIR_WIN:-Z:\\app}"
+wine_python app.py >> /var/log/mt5_setup.log 2>&1 &
+
+# wine64 may exit after spawning python.exe; wait for the port, not the wrapper PID.
+for _ in $(seq 1 60); do
+    if nc -z 127.0.0.1 "${MT5_API_PORT}" 2>/dev/null; then
+        log_message "INFO" "Flask server in Wine started successfully on port ${MT5_API_PORT}."
+        exit 0
+    fi
+    sleep 1
+done
+
+log_message "ERROR" "Flask server did not listen on port ${MT5_API_PORT} within 60 seconds."
+exit 1

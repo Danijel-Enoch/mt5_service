@@ -25,4 +25,5 @@ if [ -e "$mt5file" ]; then
     $wine_executable "$mt5file" &
 else
     log_message "ERROR" "File $mt5file is not installed. MT5 cannot be run."
+    exit 1
 fi

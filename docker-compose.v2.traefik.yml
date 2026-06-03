@@ -1,0 +1,79 @@
+# Traefik overlay for v2 multi-account stack.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml \
+#     -f docker-compose.v2.yml -f docker-compose.v2.traefik.yml up -d
+
+services:
+  mt5:
+    labels:
+      traefik.http.routers.api-mt5-http.priority: "1"
+      traefik.http.routers.api-mt5-https.priority: "1"
+
+  mt5-gateway:
+    networks:
+      - traefik-public
+      - mt5-net
+    labels:
+      traefik.enable: true
+      traefik.docker.network: traefik-public
+
+      traefik.http.routers.api-mt5-v2-http.rule: Host(`${API_DOMAIN}`) && PathPrefix(`/v2`)
+      traefik.http.routers.api-mt5-v2-http.entrypoints: http
+      traefik.http.routers.api-mt5-v2-http.middlewares: https-redirect
+      traefik.http.routers.api-mt5-v2-http.service: api-mt5-v2-service
+      traefik.http.routers.api-mt5-v2-http.priority: 100
+
+      traefik.http.routers.api-mt5-v2-https.rule: Host(`${API_DOMAIN}`) && PathPrefix(`/v2`)
+      traefik.http.routers.api-mt5-v2-https.entrypoints: https
+      traefik.http.routers.api-mt5-v2-https.tls: true
+      traefik.http.routers.api-mt5-v2-https.tls.certresolver: le
+      traefik.http.routers.api-mt5-v2-https.service: api-mt5-v2-service
+      traefik.http.routers.api-mt5-v2-https.priority: 100
+
+      traefik.http.services.api-mt5-v2-service.loadbalancer.server.port: 5001
+
+  mt5-worker-1:
+    networks:
+      - traefik-public
+      - mt5-net
+    labels:
+      traefik.enable: true
+      traefik.docker.network: traefik-public
+
+      traefik.http.routers.vnc-worker1-http.rule: Host(`${VNC_DOMAIN_WORKER_1}`)
+      traefik.http.routers.vnc-worker1-http.entrypoints: http
+      traefik.http.routers.vnc-worker1-http.middlewares: https-redirect
+      traefik.http.routers.vnc-worker1-http.service: vnc-worker1-service
+
+      traefik.http.routers.vnc-worker1-https.rule: Host(`${VNC_DOMAIN_WORKER_1}`)
+      traefik.http.routers.vnc-worker1-https.entrypoints: https
+      traefik.http.routers.vnc-worker1-https.tls: true
+      traefik.http.routers.vnc-worker1-https.tls.certresolver: le
+      traefik.http.routers.vnc-worker1-https.service: vnc-worker1-service
+
+      traefik.http.services.vnc-worker1-service.loadbalancer.server.port: 3000
+
+  mt5-worker-2:
+    networks:
+      - traefik-public
+      - mt5-net
+    labels:
+      traefik.enable: true
+      traefik.docker.network: traefik-public
+
+      traefik.http.routers.vnc-worker2-http.rule: Host(`${VNC_DOMAIN_WORKER_2}`)
+      traefik.http.routers.vnc-worker2-http.entrypoints: http
+      traefik.http.routers.vnc-worker2-http.middlewares: https-redirect
+      traefik.http.routers.vnc-worker2-http.service: vnc-worker2-service
+
+      traefik.http.routers.vnc-worker2-https.rule: Host(`${VNC_DOMAIN_WORKER_2}`)
+      traefik.http.routers.vnc-worker2-https.entrypoints: https
+      traefik.http.routers.vnc-worker2-https.tls: true
+      traefik.http.routers.vnc-worker2-https.tls.certresolver: le
+      traefik.http.routers.vnc-worker2-https.service: vnc-worker2-service
+
+      traefik.http.services.vnc-worker2-service.loadbalancer.server.port: 3000
+
+networks:
+  traefik-public:
+    external: true

@@ -1,0 +1,56 @@
+services:
+  mt5-gateway:
+    build:
+      dockerfile: Dockerfile.gateway
+    container_name: mt5-gateway
+    ports:
+      - "5010:5001"
+    environment:
+      MT5_WORKER_HOSTS: mt5-worker-1,mt5-worker-2
+      MT5_WORKER_PORT: "5001"
+      MT5_WORKER_VNC_PORTS: mt5-worker-1:3011,mt5-worker-2:3012
+      MT5_API_PORT: "5001"
+    depends_on:
+      - mt5-worker-1
+      - mt5-worker-2
+    networks:
+      - mt5-net
+    restart: unless-stopped
+
+  mt5-worker-1:
+    build:
+      dockerfile: Dockerfile
+    container_name: mt5-worker-1
+    volumes:
+      - ./config/workers/worker-1:/config
+    ports:
+      - "3011:3000"
+    environment:
+      MT5_WORKER_NAME: mt5-worker-1
+      MT5_API_PORT: "5001"
+    env_file:
+      - .env
+    networks:
+      - mt5-net
+    restart: unless-stopped
+
+  mt5-worker-2:
+    build:
+      dockerfile: Dockerfile
+    container_name: mt5-worker-2
+    volumes:
+      - ./config/workers/worker-2:/config
+    ports:
+      - "3012:3000"
+    environment:
+      MT5_WORKER_NAME: mt5-worker-2
+      MT5_API_PORT: "5001"
+    env_file:
+      - .env
+    networks:
+      - mt5-net
+    restart: unless-stopped
+
+networks:
+  mt5-net:
+    driver: bridge

@@ -1,5 +1,13 @@
 import logging
 import os
+import sys
+from pathlib import Path
+
+# Wine Python may not put the script dir on sys.path (cwd/PYTHONPATH mismatch).
+_APP_ROOT = Path(__file__).resolve().parent
+if str(_APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_APP_ROOT))
+
 from flask import Flask
 from dotenv import load_dotenv
 import MetaTrader5 as mt5
@@ -17,6 +25,7 @@ from routes.order import order_bp
 from routes.history import history_bp
 from routes.error import error_bp
 from routes.account import account_bp
+from routes.internal import internal_bp
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -35,6 +44,7 @@ app.register_blueprint(order_bp)
 app.register_blueprint(history_bp)
 app.register_blueprint(error_bp)
 app.register_blueprint(account_bp)
+app.register_blueprint(internal_bp)
 
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 

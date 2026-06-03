@@ -1,3 +1,10 @@
 #!/bin/bash
-# Start MetaTrader 5 terminal
-wine "/config/.wine/drive_c/Program Files/MetaTrader 5/terminal64.exe" &
+export WINEPREFIX="${WINEPREFIX:-/config/.wine}"
+export WINEARCH="${WINEARCH:-win64}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-abc}"
+export DISPLAY="${DISPLAY:-:0}"
+
+MT5="/config/.wine/drive_c/Program Files/MetaTrader 5/terminal64.exe"
+if [ -f "$MT5" ]; then
+    wine64 "$MT5" &
+fi

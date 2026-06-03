@@ -75,9 +75,70 @@ Live Trading Account
 
 **Service Endpoints:**
 
-- **Flask API:** Port 5001 (primary interface)
-- **VNC:** Port 3000 (optional, for remote desktop)
+- **Flask API (v1):** Port 5002 on host → legacy single-account container
+- **Flask API (v2):** Port 5010 on host → multi-account gateway
+- **VNC (v1):** Port 3001 on host
+- **VNC (v2 workers):** Ports 3011 and 3012 on host
 - **Traefik:** Ports 80/443 (optional, for HTTPS with domain)
+
+## Multi-Account (v2)
+
+v2 runs **alongside v1** without changing the existing `mt5` service. Account IDs are your **MT5 login numbers**, discovered at runtime after you log in via VNC on each worker.
+
+| Stack | API | VNC |
+|---|---|---|
+| v1 legacy | `http://localhost:5002` | `http://localhost:3001` |
+| v2 gateway | `http://localhost:5010` | — |
+| v2 worker 1 | (internal) | `http://localhost:3011` |
+| v2 worker 2 | (internal) | `http://localhost:3012` |
+
+**Shortcuts:** [`Makefile`](Makefile) wraps the compose file sets — run `make` or `make help` for targets. Use the same target family for `up` and `down` (e.g. `make up` + `make down`, not bare `docker compose down`).
+
+**Start v1 only (unchanged):**
+
+```bash
+make up-v1
+```
+
+**Start v1 + v2 together (Linux VPS / production):**
+
+```bash
+make up
+```
+
+**Apple Silicon Mac (add amd64 emulation overlay):**
+
+```bash
+make up-mac
+```
+
+**v2 only (after retiring v1):**
+
+```bash
+make up-v2
+```
+
+**Bootstrap v2 workers:**
+
+1. Open VNC on `:3011` and `:3012`, log into each MT5 account (save password).
+2. Discover account IDs (MT5 login numbers):
+
+   ```bash
+   curl http://localhost:5010/v2/accounts
+   ```
+
+3. Call the v2 API using those login IDs:
+
+   ```bash
+   curl http://localhost:5010/v2/accounts/25115284/get_positions
+   curl -X POST http://localhost:5010/v2/accounts/25115284/order \
+     -H "Content-Type: application/json" \
+     -d '{"symbol":"EURUSD","type":"BUY","volume":0.01}'
+   ```
+
+**Phase out v1:** stop the `mt5` service when all clients use v2, then optionally map the gateway to port `5002` in [`docker-compose.v2.yml`](docker-compose.v2.yml).
+
+With Traefik, merge [`docker-compose.v2.traefik.yml`](docker-compose.v2.traefik.yml) so `/v2` routes to the gateway while v1 routes stay on the legacy container.
 
 ## Prerequisites
 
@@ -285,42 +346,15 @@ The Flask API runs on port 5001 by default. Key endpoints:
 
 ### Managing Services
 
-**Start Services:**
+Use [`Makefile`](Makefile) targets so `down` matches the stack you started (`make help` lists all).
 
-```bash
-docker-compose up -d
-```
+**v1 stack:** `make up-v1` · `make down-v1` · `make logs-v1` · `make restart-v1` · `make build-v1`
 
-**Stop Services:**
+**v1 + v2:** `make up` · `make down` · `make logs` · `make build` · `make logs-gateway` · `make logs-worker1`
 
-```bash
-docker-compose down
-```
+**Mac v1 + v2:** `make up-mac` · `make down-mac` · `make logs-mac` · `make build-mac`
 
-**View Logs:**
-
-```bash
-# All services
-docker-compose logs -f
-
-# MT5 service only
-docker-compose logs -f mt5
-
-# Traefik service only
-docker-compose logs -f traefik
-```
-
-**Restart Service:**
-
-```bash
-docker-compose restart mt5
-```
-
-**Rebuild After Changes:**
-
-```bash
-docker-compose up -d --build
-```
+**Traefik:** `make up-traefik` / `make up-traefik-full` (and matching `down-*`, `logs-traefik*`)
 
 ## API Documentation
 
@@ -424,11 +458,25 @@ sudo lsof -i :5001
 
 ```bash
 # Check MT5 installation inside container
-docker exec -it mt5 wine /config/.wine/drive_c/Program\ Files/MetaTrader\ 5/terminal64.exe --version
+docker exec -it mt5 wine64 /config/.wine/drive_c/Program\ Files/MetaTrader\ 5/terminal64.exe --version
 
 # Check setup logs
 docker exec -it mt5 cat /var/log/mt5_setup.log
 ```
+
+**Workers show "Bad EXE format", Rosetta trap, or black VNC screen:**
+
+1. Use [`docker-compose.mac.yml`](docker-compose.mac.yml) on Apple Silicon.
+2. Do **not** install Wine via VNC prompts — the image already includes WineHQ; manual installs often create a broken 32-bit prefix.
+3. Reset **worker volumes only** on Mac (never prod `./config/.wine` if v1 works):
+
+```bash
+make worker-reset-mac
+```
+
+4. Watch install: `docker exec mt5-worker-1 tail -f /var/log/mt5_setup.log` — prefix path must show `/config/.wine`, not blank.
+
+**Mac limitation:** MT5 auto-install can still fail under Docker Desktop Rosetta (`rosetta error: invalid gdt selector`). For reliable worker bootstrap, use a **Linux VPS** or copy a working `./config` tree from production into `config/workers/worker-1/`.
 
 **API not accessible from outside:**
 
