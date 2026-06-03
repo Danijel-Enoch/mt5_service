@@ -13,9 +13,11 @@ help:
 	@echo "  Optional:    make up-traefik / down-traefik  (only if using Traefik)"
 	@echo ""
 	@echo "  make ps-mt5            containers for this compose project"
+	@echo "  make restart-workers   restart workers after VNC MT5 login (API attach)"
+	@echo "  make verify            curl gateway /health and /accounts"
 	@echo "  make worker-reset-mac  reset worker Wine prefixes (Mac troubleshooting)"
 
-.PHONY: up down logs build restart-gateway
+.PHONY: up down logs build restart-gateway restart-workers verify
 up:
 	$(COMPOSE) $(FILES) up -d --build
 
@@ -30,6 +32,13 @@ build:
 
 restart-gateway:
 	$(COMPOSE) $(FILES) restart mt5-gateway
+
+restart-workers:
+	$(COMPOSE) $(FILES) restart mt5-worker-1 mt5-worker-2
+
+verify:
+	@curl -sS http://localhost:5002/health; echo
+	@curl -sS http://localhost:5002/accounts; echo
 
 .PHONY: logs-gateway logs-worker1 logs-worker2
 logs-gateway:

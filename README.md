@@ -11,7 +11,8 @@ A Docker-based REST API service that provides programmatic access to MetaTrader 
 - [Prerequisites](#prerequisites)
 - [Deployment without Traefik](#deployment-without-traefik) (default)
 - [Deployment with Traefik](#deployment-with-traefik) (optional)
-- [Bootstrap workers](#bootstrap-workers)
+  - [Bootstrap workers (first run)](#bootstrap-workers-first-run)
+  - [Day-2 checks](#day-2-checks)
 - [Configuration reference](#configuration-reference)
 - [Usage](#usage)
 - [API Integration](#api-integration)
@@ -104,14 +105,17 @@ MT5_API_PORT=5001
 make up
 ```
 
-### 3. Verify
+### 3. Bootstrap MT5 (required on first run)
+
+After `make up`, the gateway may show `connected: false` until you log in via VNC and restart workers. Follow **[Bootstrap workers](#bootstrap-workers-first-run)**.
+
+Quick check when done:
 
 ```bash
-curl http://localhost:5002/health
-curl http://localhost:5002/accounts
+make verify
 ```
 
-On a VPS, replace `localhost` with the server IP or with the hostname your **nginx** (or other proxy) forwards to `127.0.0.1:5002`.
+On a VPS, run `make verify` on the server (or curl your public API URL). Expect `any_connected: true` and each worker `routable: true`.
 
 ### 4. Firewall (VPS)
 
@@ -139,7 +143,7 @@ Clients then use `https://api.mt5.bawembye.com/accounts/<login>/...` even though
 
 ### 6. Bootstrap MT5
 
-Follow [Bootstrap workers](#bootstrap-workers) using `:3011` and `:3012` (or your nginx VNC URLs).
+Follow [Bootstrap workers](#bootstrap-workers-first-run) (`:3011` / `:3012` or nginx VNC URLs), then `make restart-workers` and `make verify`.
 
 ### Managing services (no Traefik)
 
@@ -149,6 +153,8 @@ Follow [Bootstrap workers](#bootstrap-workers) using `:3011` and `:3012` (or you
 | Stop | `make down` |
 | Logs | `make logs` · `make logs-gateway` · `make logs-worker1` · `make logs-worker2` |
 | Rebuild | `make build` |
+| Restart workers (after VNC login) | `make restart-workers` |
+| Check API registration | `make verify` |
 
 ---
 
@@ -194,14 +200,14 @@ docker network create traefik-public
 make up-traefik
 ```
 
-### 4. Verify
+### 4. Bootstrap and verify
+
+Complete [Bootstrap workers](#bootstrap-workers-first-run), then:
 
 ```bash
-curl https://api.mt5.bawembye.com/health
-curl https://api.mt5.bawembye.com/accounts
+make verify
+# or: curl https://api.mt5.bawembye.com/accounts
 ```
-
-Open `https://w1.vnc.mt5.bawembye.com` and `https://w2.vnc.mt5.bawembye.com` for MT5 login.
 
 If nginx fronts Traefik, proxy port 80/443 to `9080`/`9443` and preserve `Host` headers.
 
@@ -212,34 +218,64 @@ If nginx fronts Traefik, proxy port 80/443 to `9080`/`9443` and preserve `Host` 
 | Start | `make up-traefik` |
 | Stop | `make down-traefik` |
 | Logs | `make logs-traefik` |
+| Restart workers (after VNC login) | `make restart-workers` |
+| Check API registration | `make verify` |
 
 ---
 
-## Bootstrap workers
+## Bootstrap workers (first run)
 
-Same for both deployment paths; only VNC URLs differ.
+Use this sequence after `make up` or `make up-traefik` on a **new** `config/workers/worker-*` volume, or whenever `GET /accounts` shows `connected: false` while MT5 looks fine in VNC.
 
-1. Open VNC for worker 1 and worker 2:
-   - **No Traefik:** `http://<host>:3011` and `:3012`
-   - **Traefik:** `https://w1.vnc.mt5.bawembye.com`, `https://w2.vnc.mt5.bawembye.com`
-2. Log into MT5 in each container (save password).
-3. List accounts:
+### Why restart?
 
-   ```bash
-   curl http://localhost:5002/accounts
-   # or https://api.mt5.bawembye.com/accounts when using a public API URL
-   ```
+The Wine Python API calls `mt5.initialize()` when Flask starts — often **before** MT5 is logged in via VNC. The GUI can be connected while the API still reports `connected: false`. Restarting workers after login lets Flask attach to the running, logged-in terminal.
 
-4. Call the API (replace `<login>` with MT5 login number):
+### Steps
 
-   ```bash
-   curl http://localhost:5002/accounts/<login>/get_positions
-   curl -X POST http://localhost:5002/accounts/<login>/order \
-     -H "Content-Type: application/json" \
-     -d '{"symbol":"EURUSD","type":"BUY","volume":0.01}'
-   ```
+| Step | What to do |
+| --- | --- |
+| 1 | `make up` (wait until containers are up; first build can take several minutes) |
+| 2 | Open VNC per worker and log into **MT5** (not only KasmVNC): enable **Algorithmic trading** in MT5 options if prompted |
+| 3 | Use a **different** MT5 account on each worker |
+| 4 | `make restart-workers` |
+| 5 | Wait ~1–3 minutes for Flask to listen, then `make verify` |
 
-Swagger per account (via gateway): `/accounts/<login>/apidocs/`
+**VNC URLs**
+
+| Worker | No Traefik | With Traefik + `VNC_BASE_DOMAIN` |
+| --- | --- | --- |
+| 1 | `http://<host>:3011` | `https://w1.vnc.mt5.bawembye.com` |
+| 2 | `http://<host>:3012` | `https://w2.vnc.mt5.bawembye.com` |
+
+KasmVNC login: `CUSTOM_USER` / `PASSWORD` from `.env`.
+
+### Success criteria (`make verify`)
+
+```json
+"any_connected": true
+```
+
+Each entry in `/accounts` should have:
+
+- `connected`: `true`
+- `account_id`: your MT5 login number (string)
+- `routable`: `true`
+
+Example API calls (use your login from `/accounts`):
+
+```bash
+curl http://localhost:5002/accounts/297434798/get_positions
+curl -X POST http://localhost:5002/accounts/297434798/order \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"EURUSD","type":"BUY","volume":0.01}'
+```
+
+Swagger UI: `/apidocs/` (gateway proxies Flasgger assets from a connected worker). Per-account: `/accounts/<login>/apidocs/`
+
+### After bootstrap
+
+Saved logins live in `config/workers/worker-*`. Later `docker restart` or `make restart-workers` usually picks them up without repeating VNC — still run `make verify` after any restart.
 
 ### Scaling workers
 
@@ -261,6 +297,17 @@ Gateway settings in `docker-compose.yml`: `MT5_WORKER_HOSTS`, `MT5_WORKER_VNC_PO
 
 Volumes: `config/workers/worker-1`, `config/workers/worker-2` (Wine + MT5 data per account).
 
+## Day-2 checks
+
+| Check | Command |
+| --- | --- |
+| Containers running | `make ps-mt5` |
+| Gateway + workers healthy | `make verify` |
+| Worker logs | `make logs-worker1` |
+| MT5 setup log | `docker exec mt5-worker-1 tail -100 /var/log/mt5_setup.log` |
+
+If VNC shows MT5 connected but `make verify` shows `connected: false`, run `make restart-workers` and wait, then `make verify` again.
+
 ## Usage
 
 ### Gateway routes
@@ -269,6 +316,7 @@ Volumes: `config/workers/worker-1`, `config/workers/worker-2` (Wine + MT5 data p
 | --- | --- |
 | `GET /health` | Gateway + worker status |
 | `GET /accounts` | Discovered MT5 logins (`vnc_port`, `vnc_host` when configured) |
+| `GET /apidocs/` | Swagger UI (also `/flasgger_static/`, `/apispec_1.json` at gateway root) |
 | `GET /accounts/<login>/health` | Worker health |
 | `GET/POST /accounts/<login>/<endpoint>` | Proxied worker API (`order`, `get_positions`, …) |
 
@@ -338,7 +386,11 @@ docker ps --filter name=mt5-gateway
 
 **API not reachable (Traefik):** `make logs-traefik`; check DNS and HTTP-01 on port 80.
 
-**Account not routable:** MT5 must be logged in on that worker; `GET /accounts` should show `connected` and `routable`. Never use the same login on two workers.
+**VNC logged in but API `connected: false`:** run `make restart-workers`, wait 1–3 minutes, then `make verify`. See [Bootstrap workers](#bootstrap-workers-first-run).
+
+**Account not routable:** MT5 must be logged in on that worker; `make verify` should show `connected` and `routable`. Never use the same login on two workers (gateway drops duplicate logins).
+
+**Flask slow on first start:** setup may log “Flask did not listen within 60 seconds” while Flask still starts later; use `make restart-workers` after VNC login if `/accounts` stays disconnected.
 
 **Mac / Wine:** `make up-mac`; do not install Wine via VNC. `make worker-reset-mac` resets worker prefixes only.
 

@@ -139,6 +139,19 @@ class WorkerRegistry:
         snapshot = self.refresh()
         return snapshot.route_map.get(account_id)
 
+    def get_docs_worker_url(self) -> Optional[str]:
+        """Worker used for /apidocs and Flasgger static assets at the gateway root."""
+        snapshot = self.refresh()
+        for w in snapshot.workers:
+            if w.account_id and w.account_id in snapshot.route_map:
+                return w.worker_url
+        for w in snapshot.workers:
+            if w.reachable:
+                return w.worker_url
+        if self._worker_hosts:
+            return f"http://{self._worker_hosts[0]}:{self._worker_port}"
+        return None
+
     def list_accounts(self) -> List[dict]:
         snapshot = self.refresh()
         accounts = []

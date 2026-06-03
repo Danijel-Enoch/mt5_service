@@ -2,7 +2,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, redirect, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from registry import registry
@@ -59,6 +59,16 @@ def _proxy_to_worker(worker_url: str, path: str) -> Response:
     return Response(resp.content, status=resp.status_code, headers=response_headers)
 
 
+def _proxy_docs(path: str) -> Response:
+    worker_url = registry.get_docs_worker_url()
+    if not worker_url:
+        return jsonify({"error": "No worker available for API docs"}), 503
+    return _proxy_to_worker(worker_url, path)
+
+
+_DOC_METHODS = ["GET", "HEAD", "OPTIONS"]
+
+
 @app.route("/health", methods=["GET"])
 def gateway_health():
     return jsonify(registry.aggregate_health()), 200
@@ -67,6 +77,28 @@ def gateway_health():
 @app.route("/accounts", methods=["GET"])
 def list_accounts():
     return jsonify({"accounts": registry.list_accounts()}), 200
+
+
+@app.route("/apidocs", methods=["GET"])
+def apidocs_redirect():
+    return redirect("/apidocs/", code=302)
+
+
+@app.route("/apispec_1.json", methods=_DOC_METHODS)
+def proxy_apispec():
+    return _proxy_docs("apispec_1.json")
+
+
+@app.route("/flasgger_static/<path:asset>", methods=_DOC_METHODS)
+def proxy_flasgger_static(asset: str):
+    return _proxy_docs(f"flasgger_static/{asset}")
+
+
+@app.route("/apidocs/", defaults={"subpath": ""}, methods=_DOC_METHODS)
+@app.route("/apidocs/<path:subpath>", methods=_DOC_METHODS)
+def proxy_apidocs(subpath: str):
+    path = f"apidocs/{subpath}" if subpath else "apidocs/"
+    return _proxy_docs(path)
 
 
 @app.route("/accounts/<account_id>/health", methods=["GET"])
