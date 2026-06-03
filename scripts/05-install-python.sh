@@ -6,6 +6,8 @@ log_message "RUNNING" "05-install-python.sh"
 setup_echo "Running Wine Python setup..."
 
 install_wine_python() {
+    clear_stale_wine_installers
+
     if is_wine_python_installed; then
         resolve_wine_python_exe
         log_message "INFO" "Python is already installed in Wine at ${wine_python_exe}."
@@ -26,7 +28,7 @@ install_wine_python() {
     mkdir -p "${WINEPREFIX}/drive_c"
     rm -rf "${target_dir}"
     cp -a "${python_template_dir}" "${target_dir}"
-    wait_wine
+    setup_echo "Python files copied; verifying Wine Python..."
 
     if ! is_wine_python_installed; then
         log_message "ERROR" "Python verification failed after copying template."

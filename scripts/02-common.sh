@@ -53,8 +53,12 @@ with_setup_lock() {
 }
 
 wait_wine() {
-    wineserver -w 2>/dev/null || true
+    # Do not use wineserver -w when MT5 is running; it waits for terminal64.exe forever.
     sleep 1
+}
+
+clear_stale_wine_installers() {
+    pkill -f '[m]siexec' 2>/dev/null || true
 }
 
 wine_python() {
