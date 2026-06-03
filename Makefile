@@ -9,8 +9,9 @@ help:
 	@echo "MT5 service — Docker Compose shortcuts"
 	@echo ""
 	@echo "  Default:     make up / down / logs          (no Traefik — use nginx or host ports)"
+	@echo "               make build                     rebuild images + start (after git pull)"
 	@echo "  Mac:         make up-mac / down-mac / logs-mac / build-mac"
-	@echo "  Optional:    make up-traefik / down-traefik  (only if using Traefik)"
+	@echo "  Optional:    make up-traefik / build-traefik / down-traefik"
 	@echo ""
 	@echo "  make ps-mt5            containers for this compose project"
 	@echo "  make restart-workers   restart workers after VNC MT5 login (API attach)"
@@ -19,7 +20,7 @@ help:
 
 .PHONY: up down logs build restart-gateway restart-workers verify
 up:
-	$(COMPOSE) $(FILES) up -d --build
+	$(COMPOSE) $(FILES) up -d
 
 down:
 	$(COMPOSE) $(FILES) down
@@ -52,7 +53,7 @@ logs-worker2:
 
 .PHONY: up-mac down-mac logs-mac build-mac worker-reset-mac
 up-mac:
-	$(COMPOSE) $(FILES_MAC) up -d --build
+	$(COMPOSE) $(FILES_MAC) up -d
 
 down-mac:
 	$(COMPOSE) $(FILES_MAC) down
@@ -67,8 +68,11 @@ worker-reset-mac: down-mac
 	rm -rf config/workers/worker-1/.wine config/workers/worker-2/.wine
 	$(COMPOSE) $(FILES_MAC) up -d --build
 
-.PHONY: up-traefik down-traefik logs-traefik
+.PHONY: up-traefik build-traefik down-traefik logs-traefik
 up-traefik:
+	$(COMPOSE) $(FILES_TRAEFIK) up -d
+
+build-traefik:
 	$(COMPOSE) $(FILES_TRAEFIK) up -d --build
 
 down-traefik:

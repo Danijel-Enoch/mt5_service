@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 
@@ -66,6 +67,51 @@ def _proxy_docs(path: str) -> Response:
     return _proxy_to_worker(worker_url, path)
 
 
+def _gateway_base_path(account_id: str) -> str:
+    return f"/accounts/{account_id}/"
+
+
+def _rewrite_spec_base_path(resp: Response, account_id: str) -> Response:
+    if resp.status_code != 200:
+        return resp
+    try:
+        spec = json.loads(resp.get_data())
+    except json.JSONDecodeError:
+        return resp
+    spec["basePath"] = _gateway_base_path(account_id)
+    headers = [(k, v) for k, v in resp.headers.items()
+               if k.lower() not in (HOP_BY_HOP_HEADERS | {"content-length"})]
+    return Response(
+        json.dumps(spec),
+        status=resp.status_code,
+        headers=headers,
+        mimetype="application/json",
+    )
+
+
+def _rewrite_apidocs_html(resp: Response, account_id: str) -> Response:
+    if resp.status_code != 200:
+        return resp
+    content_type = resp.headers.get("Content-Type", "")
+    if "html" not in content_type.lower():
+        return resp
+    spec_url = f"/accounts/{account_id}/apispec_1.json"
+    body = resp.get_data(as_text=True)
+    if spec_url not in body:
+        body = body.replace('"/apispec_1.json"', f'"{spec_url}"')
+        body = body.replace("'/apispec_1.json'", f"'{spec_url}'")
+        if spec_url not in body:
+            body = body.replace("/apispec_1.json", spec_url)
+    headers = [(k, v) for k, v in resp.headers.items()
+               if k.lower() not in (HOP_BY_HOP_HEADERS | {"content-length"})]
+    return Response(body, status=resp.status_code, headers=headers, mimetype=content_type)
+
+
+def _proxy_worker_apispec(worker_url: str, account_id: str) -> Response:
+    resp = _proxy_to_worker(worker_url, "apispec_1.json")
+    return _rewrite_spec_base_path(resp, account_id)
+
+
 _DOC_METHODS = ["GET", "HEAD", "OPTIONS"]
 
 
@@ -86,7 +132,12 @@ def apidocs_redirect():
 
 @app.route("/apispec_1.json", methods=_DOC_METHODS)
 def proxy_apispec():
-    return _proxy_docs("apispec_1.json")
+    worker_url, account_id = registry.get_docs_worker()
+    if not worker_url:
+        return jsonify({"error": "No worker available for API docs"}), 503
+    if not account_id:
+        return _proxy_to_worker(worker_url, "apispec_1.json")
+    return _proxy_worker_apispec(worker_url, account_id)
 
 
 @app.route("/flasgger_static/<path:asset>", methods=_DOC_METHODS)
@@ -122,7 +173,12 @@ def proxy_account(account_id: str, endpoint: str):
             "error": "Account not found or not connected",
             "account_id": account_id,
         }), 404
-    return _proxy_to_worker(worker_url, endpoint)
+    if endpoint == "apispec_1.json":
+        return _proxy_worker_apispec(worker_url, account_id)
+    resp = _proxy_to_worker(worker_url, endpoint)
+    if endpoint == "apidocs" or endpoint.startswith("apidocs/"):
+        return _rewrite_apidocs_html(resp, account_id)
+    return resp
 
 
 if __name__ == "__main__":

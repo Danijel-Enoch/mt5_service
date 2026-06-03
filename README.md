@@ -9,6 +9,7 @@ A Docker-based REST API service that provides programmatic access to MetaTrader 
 - [Platform support](#platform-support)
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
+- [Compose commands (`make up` vs `make build`)](#compose-commands-make-up-vs-make-build)
 - [Deployment without Traefik](#deployment-without-traefik) (default)
 - [Deployment with Traefik](#deployment-with-traefik) (optional)
   - [Bootstrap workers (first run)](#bootstrap-workers-first-run)
@@ -31,7 +32,7 @@ Most setups use **host ports** and an external reverse proxy (e.g. nginx), or di
 
 | | **Without Traefik** (typical) | **With Traefik** (optional) |
 | --- | --- | --- |
-| Start stack | `make up` | `make up-traefik` (after `docker network create traefik-public`) |
+| Start stack | `make build` (first time / after code changes), `make up` (fast restart) | `make build-traefik` / `make up-traefik` (after `docker network create traefik-public`) |
 | Compose files | `docker-compose.yml` only | `docker-compose.yml` + `docker-compose.traefik.yml` |
 | API access | `http://<host>:5002` (or nginx → `localhost:5002`) | `https://${API_DOMAIN}` |
 | VNC access | `http://<host>:3011`, `:3012` (or nginx → those ports) | `https://w1.${VNC_BASE_DOMAIN}`, `w2.${VNC_BASE_DOMAIN}` |
@@ -40,7 +41,7 @@ Most setups use **host ports** and an external reverse proxy (e.g. nginx), or di
 
 **Do not run `make up-traefik` if you are not using Traefik** — use `make up` only.
 
-**Shortcuts:** [`Makefile`](Makefile) — `make help`, `make up`, `make down`. Always use the matching `down` target for how you started (`make down` vs `make down-traefik`).
+**Shortcuts:** [`Makefile`](Makefile) — `make help`, `make up`, `make build`, `make down`. See [Compose commands](#compose-commands-make-up-vs-make-build). Use the matching `down` target for how you started (`make down` vs `make down-traefik`).
 
 ## Platform support
 
@@ -79,6 +80,27 @@ Internal container ports stay `5001` (Flask) and `3000` (KasmVNC); only the **ho
 
 ---
 
+## Compose commands (`make up` vs `make build`)
+
+Services use local `build:` in Compose (not pre-pulled images). Worker images are large — avoid full rebuilds when you only need a restart.
+
+| Situation | Command | What happens |
+| --- | --- | --- |
+| **First deploy** on this machine | `make build` | Builds all images, creates and starts containers (first worker build can take several minutes) |
+| **Later start** — after `make down`, host reboot, no code changes | `make up` | Starts containers using **existing** images (fast) |
+| **After `git pull`** or changes to app code, Dockerfiles, or `requirements.txt` | `make build` | Rebuilds images and recreates containers with new code |
+| **`.env` only** changed | `make up` | Usually enough — Compose recreates containers with the new env |
+| **VNC login done** but API still `connected: false` | `make restart-workers` | Restarts workers only; no image rebuild |
+| **Gateway code only** (skip worker rebuild) | `docker compose build mt5-gateway && docker compose up -d mt5-gateway` | Faster than `make build` when only `app/gateway/` changed |
+
+`make up` will still build **missing** images on a fresh machine, but it will **not** rebuild after Dockerfile or code changes if an old image already exists — use `make build` after pulls.
+
+**Traefik overlay:** same pattern — `make build-traefik` (first time / after code changes), `make up-traefik` (fast restart).
+
+**Mac overlay:** `make build-mac` (first time / after changes), `make up-mac` (fast restart).
+
+---
+
 ## Deployment without Traefik
 
 This is the **default** path. No Traefik container, no `traefik-public` network, no `API_DOMAIN` / `VNC_BASE_DOMAIN` required in `.env`.
@@ -101,13 +123,23 @@ MT5_API_PORT=5001
 
 ### 2. Start the stack
 
+**First time on this VPS:**
+
+```bash
+make build
+```
+
+**Subsequent starts** (images already built, no app changes — e.g. after `make down`):
+
 ```bash
 make up
 ```
 
+See [Compose commands](#compose-commands-make-up-vs-make-build) for when to use each.
+
 ### 3. Bootstrap MT5 (required on first run)
 
-After `make up`, the gateway may show `connected: false` until you log in via VNC and restart workers. Follow **[Bootstrap workers](#bootstrap-workers-first-run)**.
+After the stack is up, the gateway may show `connected: false` until you log in via VNC and restart workers. Follow **[Bootstrap workers](#bootstrap-workers-first-run)**.
 
 Quick check when done:
 
@@ -149,10 +181,11 @@ Follow [Bootstrap workers](#bootstrap-workers-first-run) (`:3011` / `:3012` or n
 
 | Action | Command |
 | --- | --- |
-| Start | `make up` |
+| Start (existing images) | `make up` |
+| Rebuild + start (after code changes) | `make build` |
 | Stop | `make down` |
 | Logs | `make logs` · `make logs-gateway` · `make logs-worker1` · `make logs-worker2` |
-| Rebuild | `make build` |
+| Restart gateway only | `make restart-gateway` |
 | Restart workers (after VNC login) | `make restart-workers` |
 | Check API registration | `make verify` |
 
@@ -197,7 +230,8 @@ ACME_EMAIL=you@example.com
 
 ```bash
 docker network create traefik-public
-make up-traefik
+make build-traefik   # first time, or after git pull / code changes
+# later restarts:   make up-traefik
 ```
 
 ### 4. Bootstrap and verify
@@ -215,7 +249,8 @@ If nginx fronts Traefik, proxy port 80/443 to `9080`/`9443` and preserve `Host` 
 
 | Action | Command |
 | --- | --- |
-| Start | `make up-traefik` |
+| Start (existing images) | `make up-traefik` |
+| Rebuild + start (after code changes) | `make build-traefik` |
 | Stop | `make down-traefik` |
 | Logs | `make logs-traefik` |
 | Restart workers (after VNC login) | `make restart-workers` |
@@ -225,7 +260,7 @@ If nginx fronts Traefik, proxy port 80/443 to `9080`/`9443` and preserve `Host` 
 
 ## Bootstrap workers (first run)
 
-Use this sequence after `make up` or `make up-traefik` on a **new** `config/workers/worker-*` volume, or whenever `GET /accounts` shows `connected: false` while MT5 looks fine in VNC.
+Use this sequence after the stack is started (`make build` / `make up` or Traefik equivalents) on a **new** `config/workers/worker-*` volume, or whenever `GET /accounts` shows `connected: false` while MT5 looks fine in VNC.
 
 ### Why restart?
 
@@ -235,7 +270,7 @@ The Wine Python API calls `mt5.initialize()` when Flask starts — often **befor
 
 | Step | What to do |
 | --- | --- |
-| 1 | `make up` (wait until containers are up; first build can take several minutes) |
+| 1 | `make build` on first deploy, or `make up` if images already exist (wait until containers are up) |
 | 2 | Open VNC per worker and log into **MT5** (not only KasmVNC): enable **Algorithmic trading** in MT5 options if prompted |
 | 3 | Use a **different** MT5 account on each worker |
 | 4 | `make restart-workers` |
@@ -271,7 +306,7 @@ curl -X POST http://localhost:5002/accounts/297434798/order \
   -d '{"symbol":"EURUSD","type":"BUY","volume":0.01}'
 ```
 
-Swagger UI: `/apidocs/` (gateway proxies Flasgger assets from a connected worker). Per-account: `/accounts/<login>/apidocs/`
+Swagger UI: `/apidocs/` or `/accounts/<login>/apidocs/` — Try it out uses `/accounts/<login>/...` paths automatically.
 
 ### After bootstrap
 
@@ -322,7 +357,7 @@ If VNC shows MT5 connected but `make verify` shows `connected: false`, run `make
 
 ### Mac (experimental)
 
-`make up-mac` · `make worker-reset-mac` — see [Platform support](#platform-support).
+`make build-mac` (first time / after changes) · `make up-mac` (fast restart) · `make worker-reset-mac` — see [Platform support](#platform-support) and [Compose commands](#compose-commands-make-up-vs-make-build).
 
 ## API Integration
 
@@ -369,6 +404,8 @@ class MT5Client:
 
 ## Troubleshooting
 
+**Changes after `git pull` not visible:** you likely ran `make up` instead of `make build`. Rebuild with `make build`, or rebuild only the gateway if that is all that changed (see [Compose commands](#compose-commands-make-up-vs-make-build)).
+
 **Containers / logs:**
 
 ```bash
@@ -392,7 +429,7 @@ docker ps --filter name=mt5-gateway
 
 **Flask slow on first start:** setup may log “Flask did not listen within 60 seconds” while Flask still starts later; use `make restart-workers` after VNC login if `/accounts` stays disconnected.
 
-**Mac / Wine:** `make up-mac`; do not install Wine via VNC. `make worker-reset-mac` resets worker prefixes only.
+**Mac / Wine:** `make build-mac` first; `make up-mac` for restarts. Do not install Wine via VNC. `make worker-reset-mac` resets worker prefixes and rebuilds workers.
 
 ## License
 
