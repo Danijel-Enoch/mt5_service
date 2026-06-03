@@ -5,15 +5,19 @@ ENV TITLE=MetaTrader
 ENV WINEARCH=win64
 ENV WINEPREFIX="/config/.wine"
 ENV DISPLAY=:0
+ENV XDG_RUNTIME_DIR=/tmp/runtime-abc
 
 # Ensure the directory exists with correct permissions
 RUN mkdir -p /config/.wine && \
-    chown -R abc:abc /config/.wine && \
-    chmod -R 755 /config/.wine
+    mkdir -p /tmp/runtime-abc && \
+    chown -R abc:abc /config/.wine /tmp/runtime-abc && \
+    chmod -R 755 /config/.wine /tmp/runtime-abc
 
-# Disable problematic backports repository and update package lists
+# Disable broken/stale apt sources bundled in the base image (backports, nodesource)
 RUN sed -i 's/^[^#].*bullseye-backports/#&/' /etc/apt/sources.list 2>/dev/null || true && \
     find /etc/apt/sources.list.d/ -type f -exec sed -i 's/^[^#].*bullseye-backports/#&/' {} \; 2>/dev/null || true && \
+    find /etc/apt/sources.list.d/ -type f -exec sed -i '/nodesource/s/^/#/' {} \; 2>/dev/null || true && \
+    rm -f /etc/apt/sources.list.d/nodesource*.list 2>/dev/null || true && \
     apt-get update && \
     apt-get upgrade -y
 
@@ -36,6 +40,8 @@ RUN wget -q https://dl.winehq.org/wine-builds/winehq.key > /dev/null 2>&1\
 RUN dpkg --add-architecture i386 \
     && sed -i 's/^[^#].*bullseye-backports/#&/' /etc/apt/sources.list 2>/dev/null || true && \
     find /etc/apt/sources.list.d/ -type f -exec sed -i 's/^[^#].*bullseye-backports/#&/' {} \; 2>/dev/null || true && \
+    find /etc/apt/sources.list.d/ -type f -exec sed -i '/nodesource/s/^/#/' {} \; 2>/dev/null || true && \
+    rm -f /etc/apt/sources.list.d/nodesource*.list 2>/dev/null || true && \
     apt-get update
 
 # Install WineHQ stable package and dependencies

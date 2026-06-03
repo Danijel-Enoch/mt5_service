@@ -13,10 +13,8 @@ if [ -z "$MT5_API_PORT" ] && [ -f /tmp/mt5_env.sh ]; then
 fi
 
 if [ -z "$MT5_API_PORT" ]; then
-    log_message "ERROR" "MT5_API_PORT environment variable is not set!"
-    log_message "DEBUG" "Checking /tmp/mt5_env.sh..."
-    [ -f /tmp/mt5_env.sh ] && cat /tmp/mt5_env.sh || log_message "DEBUG" "/tmp/mt5_env.sh not found"
-    exit 1
+    MT5_API_PORT=5001
+    log_message "WARN" "MT5_API_PORT not set; defaulting to ${MT5_API_PORT}"
 fi
 
 log_message "INFO" "MT5_API_PORT is set to: $MT5_API_PORT"
@@ -25,7 +23,7 @@ log_message "INFO" "MT5_API_PORT is set to: $MT5_API_PORT"
 export MT5_API_PORT
 
 # Run the Flask app using Wine's Python
-wine python /app/app.py &
+$wine_executable python /app/app.py &
 
 FLASK_PID=$!
 

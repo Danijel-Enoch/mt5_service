@@ -5,9 +5,15 @@ if [ "$(id -u)" -eq 0 ]; then
     chown -R abc:abc /config/.wine 2>/dev/null || true
     chmod -R 755 /config/.wine 2>/dev/null || true
     
-    # Save environment variables to a file that abc user can read
-    # This works around runuser not preserving env vars
-    env | grep -E '^MT5_|^CUSTOM_|^PASSWORD=|^VNC_DOMAIN=|^API_DOMAIN=' > /tmp/mt5_env.sh 2>/dev/null || true
+    # Save environment variables to a file that abc user can read.
+    # runuser does not preserve Docker ENV (WINEPREFIX, WINEARCH, MT5_API_PORT, etc.).
+    {
+        echo "WINEPREFIX=${WINEPREFIX:-/config/.wine}"
+        echo "WINEARCH=${WINEARCH:-win64}"
+        echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-abc}"
+        echo "DISPLAY=${DISPLAY:-:0}"
+        env | grep -E '^MT5_|^CUSTOM_|^PASSWORD=|^VNC_DOMAIN=|^API_DOMAIN=' || true
+    } > /tmp/mt5_env.sh
     chmod 644 /tmp/mt5_env.sh
     chown abc:abc /tmp/mt5_env.sh
     

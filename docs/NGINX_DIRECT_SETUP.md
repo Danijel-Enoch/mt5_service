@@ -8,11 +8,11 @@ With this setup, nginx directly handles:
 - Domain routing (api.mt5.bawembye.com, vnc.mt5.bawembye.com)
 - SSL/TLS certificates (via certbot/Let's Encrypt)
 - HTTP to HTTPS redirects
-- Reverse proxying to Flask API (port 5002) and VNC (port 3001)
+- Reverse proxying to Flask API v1 (port 5002), Flask API v2 (port 5010), and VNC (ports 3001, 3011, 3012)
 
 ## Prerequisites
 
-- Docker containers running with ports 5002 (API) and 3001 (VNC) exposed on the host
+- Docker containers running with ports 5002 (API v1), 5010 (API v2), 3001 (v1 VNC), 3011 and 3012 (v2 worker VNC) exposed on the host
 - DNS records pointing to your VPS IP
 - Certbot installed: `sudo apt install certbot python3-certbot-nginx`
 
@@ -46,11 +46,23 @@ sudo apt install certbot python3-certbot-nginx
 Create `/etc/nginx/conf.d/mt5-services.conf`:
 
 ```nginx
-# API Service (api.mt5.bawembye.com)
+# API Service v1 (api.mt5.bawembye.com) — legacy single-account routes
 server {
     listen 80;
     server_name api.mt5.bawembye.com;
     
+    location /v2/ {
+        proxy_pass http://localhost:5010;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
     location / {
         proxy_pass http://localhost:5002;
         proxy_set_header Host $host;
