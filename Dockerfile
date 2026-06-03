@@ -28,6 +28,7 @@ RUN apt-get install -y \
     wget \
     python3-pyxdg \
     netcat \
+    unzip \
     && pip3 install --upgrade pip
 
 # Add WineHQ repository key and APT source
@@ -58,6 +59,9 @@ COPY app /app
 COPY scripts /scripts
 RUN dos2unix /scripts/*.sh && \
     chmod +x /scripts/*.sh
+
+# Pre-bake Wine Python (embed zip + pip) — copied into each worker prefix at runtime.
+RUN /scripts/build-wine-python-template.sh
 
 COPY /root /
 

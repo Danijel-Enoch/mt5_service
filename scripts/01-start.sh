@@ -33,18 +33,27 @@ fi
 # From here, we're running as abc user
 source /scripts/02-common.sh
 
+setup_echo "MT5 worker setup starting..."
+
 run_setup_step() {
     local script=$1
+    setup_echo "Step: ${script}"
     if ! "$script"; then
         log_message "ERROR" "Setup failed at ${script}"
+        setup_echo "Setup failed at ${script} — see /var/log/mt5_setup.log"
         exit 1
     fi
 }
 
-run_setup_step /scripts/03-install-mono.sh
-run_setup_step /scripts/04-install-mt5.sh
-run_setup_step /scripts/05-install-python.sh
-run_setup_step /scripts/06-install-libraries.sh
-run_setup_step /scripts/07-start-wine-flask.sh
+run_all_setup() {
+    run_setup_step /scripts/03-install-mono.sh
+    run_setup_step /scripts/04-install-mt5.sh
+    run_setup_step /scripts/05-install-python.sh
+    run_setup_step /scripts/06-install-libraries.sh
+    run_setup_step /scripts/07-start-wine-flask.sh
+}
 
+with_setup_lock run_all_setup
+
+setup_echo "MT5 worker setup complete."
 tail -f /dev/null
