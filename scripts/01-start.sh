@@ -13,7 +13,7 @@ if [ "$(id -u)" -eq 0 ]; then
         echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-abc}"
         echo "DISPLAY=${DISPLAY:-:0}"
         echo "MT5_API_PORT=${MT5_API_PORT:-5001}"
-        env | grep -E '^MT5_|^CUSTOM_|^PASSWORD=|^VNC_DOMAIN=|^API_DOMAIN=' || true
+        env | grep -E '^MT5_|^CUSTOM_|^PASSWORD=|^VNC_BASE_DOMAIN=|^API_DOMAIN=' || true
     } > /tmp/mt5_env.sh
     chmod 644 /tmp/mt5_env.sh
     chown abc:abc /tmp/mt5_env.sh

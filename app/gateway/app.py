@@ -64,12 +64,12 @@ def gateway_health():
     return jsonify(registry.aggregate_health()), 200
 
 
-@app.route("/v2/accounts", methods=["GET"])
+@app.route("/accounts", methods=["GET"])
 def list_accounts():
     return jsonify({"accounts": registry.list_accounts()}), 200
 
 
-@app.route("/v2/accounts/<account_id>/health", methods=["GET"])
+@app.route("/accounts/<account_id>/health", methods=["GET"])
 def account_health(account_id: str):
     worker_url = registry.get_worker_url(account_id)
     if not worker_url:
@@ -80,7 +80,7 @@ def account_health(account_id: str):
     return _proxy_to_worker(worker_url, "health")
 
 
-@app.route("/v2/accounts/<account_id>/<path:endpoint>", methods=[
+@app.route("/accounts/<account_id>/<path:endpoint>", methods=[
     "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD",
 ])
 def proxy_account(account_id: str, endpoint: str):

@@ -22,6 +22,7 @@ class WorkerEntry:
     worker_name: str
     worker_url: str
     vnc_port: Optional[int]
+    vnc_host: Optional[str] = None
     account_id: Optional[str] = None
     connected: bool = False
     server: Optional[str] = None
@@ -44,6 +45,7 @@ class WorkerRegistry:
         self._worker_hosts = self._parse_worker_hosts()
         self._worker_port = os.environ.get("MT5_WORKER_PORT", DEFAULT_WORKER_PORT)
         self._vnc_ports = self._parse_vnc_ports()
+        self._vnc_base_domain = os.environ.get("VNC_BASE_DOMAIN", "").strip()
 
     @staticmethod
     def _parse_worker_hosts() -> List[str]:
@@ -63,6 +65,16 @@ class WorkerRegistry:
             except ValueError:
                 logger.warning("Invalid VNC port mapping: %s", part)
         return result
+
+    def _vnc_host_for_worker(self, worker_name: str) -> Optional[str]:
+        if not self._vnc_base_domain:
+            return None
+        prefix = "mt5-worker-"
+        if worker_name.startswith(prefix):
+            index = worker_name[len(prefix):]
+            if index:
+                return f"w{index}.{self._vnc_base_domain}"
+        return None
 
     def refresh(self, force: bool = False) -> RegistrySnapshot:
         with self._lock:
@@ -86,6 +98,7 @@ class WorkerRegistry:
                 worker_name=host,
                 worker_url=worker_url,
                 vnc_port=self._vnc_ports.get(host),
+                vnc_host=self._vnc_host_for_worker(host),
             )
             try:
                 with httpx.Client(timeout=META_TIMEOUT_SECONDS) as client:
@@ -137,6 +150,7 @@ class WorkerRegistry:
                 "reachable": w.reachable,
                 "server": w.server,
                 "vnc_port": w.vnc_port,
+                "vnc_host": w.vnc_host,
                 "routable": w.account_id in snapshot.route_map if w.account_id else False,
                 "error": w.error,
             })
