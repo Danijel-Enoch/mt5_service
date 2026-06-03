@@ -7,7 +7,9 @@ log_message "RUNNING" "05-install-python.sh"
 install_python_msi() {
     local msi_dir="/tmp/python-msi"
     local target='C:\Program Files\Python39'
-    local msi_order="ucrt core dev exe lib path pip"
+    # ucrt.msi installs to system dirs and fails with TARGETDIR; Wine provides CRT.
+    local msi_order="core dev exe lib path pip"
+    local msifile msi_exit msi_log
 
     mkdir -p "$msi_dir"
     cd "$msi_dir" || return 1
@@ -19,14 +21,18 @@ install_python_msi() {
             cd - >/dev/null || true
             return 1
         fi
+        msi_log="/tmp/python-msi-${msifile}.log"
         if ! WINEPREFIX="${WINEPREFIX}" WINEARCH="${WINEARCH}" \
-            ${wine_executable} msiexec /i "${msi_dir}/${msifile}.msi" /qn "TARGETDIR=${target}" ALLUSERS=1; then
-            log_message "ERROR" "msiexec failed for ${msifile}.msi"
-            rm -f "${msifile}.msi"
+            ${wine_executable} msiexec /i "${msi_dir}/${msifile}.msi" /qn "TARGETDIR=${target}" ALLUSERS=1 \
+            > "${msi_log}" 2>&1; then
+            msi_exit=$?
+            log_message "ERROR" "msiexec failed for ${msifile}.msi (exit ${msi_exit})"
+            tail -20 "${msi_log}" >> /var/log/mt5_setup.log 2>/dev/null || true
+            rm -f "${msifile}.msi" "${msi_log}"
             cd - >/dev/null || true
             return 1
         fi
-        rm -f "${msifile}.msi"
+        rm -f "${msifile}.msi" "${msi_log}"
     done
 
     wait_wine
