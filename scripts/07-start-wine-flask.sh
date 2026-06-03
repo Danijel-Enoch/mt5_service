@@ -29,7 +29,9 @@ if nc -z 127.0.0.1 "${MT5_API_PORT}" 2>/dev/null; then
 fi
 
 cd /app || exit 1
-export PYTHONPATH=/app
+# Unix PYTHONPATH=/app is ignored by Windows python.exe; use the Wine drive path.
+APP_DIR_WIN="$(${wine_executable} winepath -w /app 2>/dev/null | tr -d '\r\n')"
+export PYTHONPATH="${APP_DIR_WIN:-Z:\\app}"
 wine_python app.py >> /var/log/mt5_setup.log 2>&1 &
 
 # wine64 may exit after spawning python.exe; wait for the port, not the wrapper PID.

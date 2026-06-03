@@ -1,5 +1,13 @@
 import logging
 import os
+import sys
+from pathlib import Path
+
+# Wine Python may not put the script dir on sys.path (cwd/PYTHONPATH mismatch).
+_APP_ROOT = Path(__file__).resolve().parent
+if str(_APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(_APP_ROOT))
+
 from flask import Flask
 from dotenv import load_dotenv
 import MetaTrader5 as mt5
