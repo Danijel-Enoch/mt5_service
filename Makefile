@@ -8,9 +8,9 @@ FILES_MAC := $(FILES) -f docker-compose.mac.yml
 help:
 	@echo "MT5 service — Docker Compose shortcuts"
 	@echo ""
-	@echo "  Stack:       make up / down / logs / build / restart-gateway"
+	@echo "  Default:     make up / down / logs          (no Traefik — use nginx or host ports)"
 	@echo "  Mac:         make up-mac / down-mac / logs-mac / build-mac"
-	@echo "  Traefik:     make up-traefik / down-traefik / logs-traefik"
+	@echo "  Optional:    make up-traefik / down-traefik  (only if using Traefik)"
 	@echo ""
 	@echo "  make ps-mt5            containers for this compose project"
 	@echo "  make worker-reset-mac  reset worker Wine prefixes (Mac troubleshooting)"
