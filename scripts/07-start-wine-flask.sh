@@ -23,20 +23,21 @@ fi
 log_message "INFO" "MT5_API_PORT is set to: $MT5_API_PORT"
 export MT5_API_PORT
 
-wine_python /app/app.py >> /var/log/mt5_setup.log 2>&1 &
-FLASK_PID=$!
+if nc -z 127.0.0.1 "${MT5_API_PORT}" 2>/dev/null; then
+    log_message "INFO" "Flask already listening on port ${MT5_API_PORT}."
+    exit 0
+fi
 
-for _ in $(seq 1 30); do
+wine_python /app/app.py >> /var/log/mt5_setup.log 2>&1 &
+
+# wine64 may exit after spawning python.exe; wait for the port, not the wrapper PID.
+for _ in $(seq 1 60); do
     if nc -z 127.0.0.1 "${MT5_API_PORT}" 2>/dev/null; then
-        log_message "INFO" "Flask server in Wine started successfully (PID ${FLASK_PID}, port ${MT5_API_PORT})."
+        log_message "INFO" "Flask server in Wine started successfully on port ${MT5_API_PORT}."
         exit 0
-    fi
-    if ! ps -p "$FLASK_PID" > /dev/null 2>&1; then
-        log_message "ERROR" "Flask process exited before binding to port ${MT5_API_PORT}."
-        exit 1
     fi
     sleep 1
 done
 
-log_message "ERROR" "Flask server did not listen on port ${MT5_API_PORT} within 30 seconds."
+log_message "ERROR" "Flask server did not listen on port ${MT5_API_PORT} within 60 seconds."
 exit 1
