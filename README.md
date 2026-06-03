@@ -95,6 +95,8 @@ Services use local `build:` in Compose (not pre-pulled images). Worker images ar
 
 `make up` will still build **missing** images on a fresh machine, but it will **not** rebuild after Dockerfile or code changes if an old image already exists — use `make build` after pulls.
 
+**Worker startup delay:** After `make build`, `make up`, or `make restart-workers`, each worker runs setup (mono, MT5, Wine Python, Flask) before port **5001** listens. For **2–5 minutes** `make verify` may show `Connection refused` on workers — that is normal; wait and run `make verify` again. Do not run `make restart-workers` again until workers are `reachable: true` or you have checked `/var/log/mt5_setup.log` for errors.
+
 **Traefik overlay:** same pattern — `make build-traefik` (first time / after code changes), `make up-traefik` (fast restart).
 
 **Mac overlay:** `make build-mac` (first time / after changes), `make up-mac` (fast restart).
@@ -137,9 +139,11 @@ make up
 
 See [Compose commands](#compose-commands-make-up-vs-make-build) for when to use each.
 
+Wait **2–5 minutes**, then `make verify`. If workers are still `Connection refused`, wait longer or inspect `docker exec mt5-worker-1 tail -50 /var/log/mt5_setup.log`.
+
 ### 3. Bootstrap MT5 (required on first run)
 
-After the stack is up, the gateway may show `connected: false` until you log in via VNC and restart workers. Follow **[Bootstrap workers](#bootstrap-workers-first-run)**.
+After workers are **reachable**, the gateway may still show `connected: false` until you log in via VNC and restart workers. Follow **[Bootstrap workers](#bootstrap-workers-first-run)**.
 
 Quick check when done:
 
@@ -270,7 +274,7 @@ The Wine Python API calls `mt5.initialize()` when Flask starts — often **befor
 
 | Step | What to do |
 | --- | --- |
-| 1 | `make build` on first deploy, or `make up` if images already exist (wait until containers are up) |
+| 1 | `make build` on first deploy, or `make up` if images already exist; wait **2–5 minutes** until `make verify` shows workers `reachable: true` (not `Connection refused`) |
 | 2 | Open VNC per worker and log into **MT5** (not only KasmVNC): enable **Algorithmic trading** in MT5 options if prompted |
 | 3 | Use a **different** MT5 account on each worker |
 | 4 | `make restart-workers` |
@@ -405,6 +409,8 @@ class MT5Client:
 ## Troubleshooting
 
 **Changes after `git pull` not visible:** you likely ran `make up` instead of `make build`. Rebuild with `make build`, or rebuild only the gateway if that is all that changed (see [Compose commands](#compose-commands-make-up-vs-make-build)).
+
+**`Connection refused` right after `make build` or `make restart-workers`:** workers are still running setup scripts; wait **2–5 minutes** and run `make verify` again. Avoid chaining another `make restart-workers` until workers are reachable or logs show a failure.
 
 **Containers / logs:**
 
