@@ -17,10 +17,12 @@ if [ ! -e "/config/.wine/drive_c/windows/mono" ]; then
             log_message "INFO" "Mono installed successfully."
         else
             log_message "ERROR" "Failed to install Mono."
+            exit 1
         fi
         rm -f /tmp/mono.msi
     else
         log_message "ERROR" "Failed to download Mono installer."
+        exit 1
     fi
 else
     log_message "INFO" "Mono is already installed."

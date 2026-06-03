@@ -12,6 +12,7 @@ if [ "$(id -u)" -eq 0 ]; then
         echo "WINEARCH=${WINEARCH:-win64}"
         echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-abc}"
         echo "DISPLAY=${DISPLAY:-:0}"
+        echo "MT5_API_PORT=${MT5_API_PORT:-5001}"
         env | grep -E '^MT5_|^CUSTOM_|^PASSWORD=|^VNC_DOMAIN=|^API_DOMAIN=' || true
     } > /tmp/mt5_env.sh
     chmod 644 /tmp/mt5_env.sh
@@ -30,17 +31,20 @@ if [ -f /tmp/mt5_env.sh ]; then
 fi
 
 # From here, we're running as abc user
-# Source common variables and functions
 source /scripts/02-common.sh
 
-# Run installation scripts
-/scripts/03-install-mono.sh
-/scripts/04-install-mt5.sh
-/scripts/05-install-python.sh
-/scripts/06-install-libraries.sh
+run_setup_step() {
+    local script=$1
+    if ! "$script"; then
+        log_message "ERROR" "Setup failed at ${script}"
+        exit 1
+    fi
+}
 
-# Start servers
-/scripts/07-start-wine-flask.sh
+run_setup_step /scripts/03-install-mono.sh
+run_setup_step /scripts/04-install-mt5.sh
+run_setup_step /scripts/05-install-python.sh
+run_setup_step /scripts/06-install-libraries.sh
+run_setup_step /scripts/07-start-wine-flask.sh
 
-# Keep the script running
 tail -f /dev/null

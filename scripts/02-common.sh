@@ -3,7 +3,8 @@
 # Set variables
 mt5setup_url="https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
 mt5file="/config/.wine/drive_c/Program Files/MetaTrader 5/terminal64.exe"
-python_url="https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe"
+python_version="3.9.13"
+python_msi_base="https://www.python.org/ftp/python/${python_version}/amd64"
 wine_executable="wine64"
 metatrader_version="5.0.36"
 mt5server_port=18812
@@ -11,6 +12,7 @@ mt5server_port=18812
 # Defaults when runuser drops Docker ENV (see 01-start.sh)
 WINEPREFIX="${WINEPREFIX:-/config/.wine}"
 WINEARCH="${WINEARCH:-win64}"
+wine_python_exe="${WINEPREFIX}/drive_c/Program Files/Python39/python.exe"
 export WINEPREFIX WINEARCH
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-abc}"
 export DISPLAY="${DISPLAY:-:0}"
@@ -22,9 +24,25 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - [$level] $message" >> /var/log/mt5_setup.log
 }
 
+wait_wine() {
+    wineserver -w 2>/dev/null || true
+    sleep 1
+}
+
+wine_python() {
+    if [ ! -f "$wine_python_exe" ]; then
+        return 1
+    fi
+    ${wine_executable} "${wine_python_exe}" "$@"
+}
+
+is_wine_python_installed() {
+    [ -f "$wine_python_exe" ] && wine_python --version >/dev/null 2>&1
+}
+
 # Function to check if a Python package is installed in Wine
 is_wine_python_package_installed() {
-    $wine_executable python -c "import pkg_resources; pkg_resources.require('$1')" 2>/dev/null
+    wine_python -c "import pkg_resources; pkg_resources.require('$1')" 2>/dev/null
     return $?
 }
 
