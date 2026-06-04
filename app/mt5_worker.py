@@ -18,9 +18,11 @@ DEFAULT_MT5_TERMINAL_PATH = (
 _job_queue: Optional[queue.Queue] = None
 _worker_started = threading.Event()
 _start_lock = threading.Lock()
+_mt5_initialized = False
 
 
 def _initialize_mt5() -> bool:
+    global _mt5_initialized
     import MetaTrader5 as mt5
 
     path = os.environ.get("MT5_TERMINAL_PATH", DEFAULT_MT5_TERMINAL_PATH)
@@ -31,18 +33,22 @@ def _initialize_mt5() -> bool:
             "MT5 worker: initialize() returned False (path=%s); continuing anyway.",
             path,
         )
+        _mt5_initialized = False
         return False
+    _mt5_initialized = True
     return True
 
 
 def _worker_loop() -> None:
-    if not _initialize_mt5():
-        pass
+    _initialize_mt5()
     _worker_started.set()
     while True:
         job = _job_queue.get()
         if job is None:
             break
+        # Re-initialize if MT5 lost connection or never connected
+        if not _mt5_initialized:
+            _initialize_mt5()
         try:
             result = job["fn"]()
             job["result"] = result
